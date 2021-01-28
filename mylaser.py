@@ -13,39 +13,24 @@ import threading
 
 import numpy as np
 
-import sys
 import os
 import configparser
 import requests
 import csv
-import json
-import tqdm
 
 import time
 import math
-import scipy.stats as stats
-
-import D_mipicamera as Dcam
-
-import ctypes
 
 import serial
-
-import matplotlib.pyplot as plt
 
 thread_laser_record = None
 thread_laser_jisuan = None
 thread_laser_post = None
-thread_video_record = None
-thread_video_jisuan = None
-thread_video_post = None
 
 event_laser_record = threading.Event()
 event_laser_jisuan = threading.Event()
 event_laser_post = threading.Event()
-event_video_record = threading.Event()
-event_video_jisuan = threading.Event()
-event_video_post = threading.Event()
+
 
 # read .ini according to section
 def read_config(r_cfg_file, section):
@@ -68,12 +53,6 @@ bsp = com_cfg['bsp']
 record_time = read_config(cfg_file, 'record_time')
 
 time_now = ''
-# time_now = str(int(time.time()))
-
-videofilename = ''
-
-video_record_time = int(record_time['video_record_time'])
-print(video_record_time)
 
 de = []  # 距离差异指标
 health = []  # 健康指标
@@ -186,33 +165,6 @@ def laser_record():
     except Exception as e:
         print(e)
 
-def video_record():
-    global videofilename
-
-    def callback(data):
-        buff = Dcam.buffer(data)
-        print("one frame len %d" % buff.length)
-        file = buff.userdata
-        buff.as_array.tofile(file)
-        return 0
-
-    try:
-        camera = Dcam.mipi_camera()
-        print("Open camera...")
-        camera.init_camera()
-        videofilename = save_dir['datadir']+'video_' + time_now + '_' + fj_id['id'] + '.h264'
-        print(videofilename)
-        file = open(videofilename, "wb")
-        # Need keep py_object reference
-        file_obj = ctypes.py_object(file)
-        camera.start_video_stream(callback, file_obj)
-        time.sleep(video_record_time)
-        camera.stop_video_stream()
-        file.close()
-        print("Close camera...")
-        camera.close_camera()
-    except Exception as e:
-        print(e)
 
 def laser_jisuan():
     global am_ratio
@@ -419,23 +371,6 @@ def laser_jisuan():
     ytickmin = int((np.min([np.min(data11), np.min(data22), np.min(data33)])))
     ytickmax = math.ceil((np.max([np.max(data11), np.max(data22), np.max(data33)])))
 
-def video_jisuan():
-    print('video jisuan')
-
-# 192.168.199.101:10001/file/fileUpload/vedio
-def video_post():
-    try:
-        #video_url = 'http://192.168.199.124:10001/file/fileUpload/vedio'
-        video_url = url['video_url']
-        print(video_url)
-        file1 = {'fileName': open(videofilename, 'rb')}
-        response = requests.post(video_url, files=file1)
-        if response.status_code == 200:
-            json = response.json()
-            print(json)
-            os.remove(videofilename)
-    except Exception as e:
-        print(e)
 
 def laser_record_thread():
     while not is_exit:
@@ -468,7 +403,7 @@ def laser_jisuan_thread():
             print(e)
             event_laser_post.clear()
 
-count = 0
+
 # when upload setted,start http upload
 def laser_post_thread():
     global collectRange
@@ -514,15 +449,6 @@ def laser_post_thread():
                         print('sleep_time', collectRange)
                         os.remove(laser_filename)
 
-                count = count + 1
-                #判断是是否录像
-                print('\033[1;35m video record and post count {0}/{1}\033[0m'.format(count,uploadTime))
-                record = False
-                if count == uploadTime:
-                    record = True
-                    count = 0
-                if record:
-                    event_video_record.set()
 
 
                 # event_video_record.set()
@@ -533,56 +459,7 @@ def laser_post_thread():
             print(e)
             event_laser_post.clear()
 
-def video_record_thread():
-    while not is_exit:
-        try:
-            if event_video_record.is_set():
-                event_video_record.clear()
 
-                print('video record start')
-                video_record()
-                print('video record end')
-
-                event_video_jisuan.set()
-
-            else:
-                event_video_record.wait()
-        except ValueError as e:
-            print("video record error")
-
-def video_jisuan_thread():
-    while not is_exit:
-        try:
-            if event_video_jisuan.is_set():
-                event_video_jisuan.clear()
-
-                print('video jisuan start')
-                video_jisuan()
-                print('video jisuan end')
-                event_video_post.set()
-
-            else:
-                event_video_jisuan.wait()
-        except BaseException as e:
-            print(e)
-            #event_video_upload.clear()
-
-def video_post_thread():
-    while not is_exit:
-        try:
-            if event_video_post.is_set():
-                event_video_post.clear()
-
-                print('video_upload start')
-                # oss_upload(videofilename)
-                # oss_upload('test.h264')
-                video_post()
-
-            else:
-                event_video_post.wait()
-        except BaseException as e:
-            print(e)
-            #event_video_post.clear()
 
 # start record thread . manified target.
 def laser_record_thread_start():
@@ -611,32 +488,7 @@ def laser_post_thread_start():
         thread_laser_post.setDaemon(True)
         thread_laser_post.start()
 
-# start record thread . manified target.
-def video_record_thread_start():
-    global thread_video_record
-    if thread_video_record is None:
-        print("video_record_thread_start")
-        thread_video_record = threading.Thread(target=video_record_thread)
-        thread_video_record.setDaemon(True)
-        thread_video_record.start()
 
-# start post thread . manified target .
-def video_jisuan_thread_start():
-    global thread_video_jisuan
-    if thread_video_jisuan is None:
-        print("video_jisuan_thread_start")
-        thread_video_jisuan = threading.Thread(target=video_jisuan_thread)
-        thread_video_jisuan.setDaemon(True)
-        thread_video_jisuan.start()
-
-# start post thread . manified target .
-def video_post_thread_start():
-    global thread_video_post
-    if thread_video_post is None:
-        print("video_post_thread_start")
-        thread_video_post = threading.Thread(target=video_post_thread)
-        thread_video_post.setDaemon(True)
-        thread_video_post.start()
 
 #if __name__ == '__main__':
 def run():
@@ -644,9 +496,6 @@ def run():
     laser_record_thread_start()
     laser_jisuan_thread_start()
     laser_post_thread_start()
-    video_record_thread_start()
-    video_jisuan_thread_start()
-    video_post_thread_start()
 
     while not is_exit:
         # start record
