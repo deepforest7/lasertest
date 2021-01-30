@@ -42,6 +42,14 @@ def read_config(r_cfg_file, section):
     print('{0} = {1}'.format(section, config_dict))
     return config_dict
 
+def set_config(w_cfg_file, section, key, value):
+    print("Save config to " + os.path.abspath(w_cfg_file))
+    config = configparser.ConfigParser()
+    config.read(w_cfg_file, encoding='utf-8')
+    config.set(section, key, value)
+    with open(w_cfg_file, 'w', encoding='utf-8') as cfgfile:
+        config.write(cfgfile)
+
 is_exit = False
 
 cfg_file = '/home/pi//raspberrypi/D_mipi_rpi/python_demo/lasercfg.ini'
@@ -118,6 +126,11 @@ def postmydata(datatype,datavalue):
             print('\033[1;33m post k = {0}\033[0m'.format(uploadTime))
             print('RECORD_SECONDS', collectTime)
             print('sleep_time', collectRange)
+
+            set_config(cfg_file,'record_time','collect_time')
+            set_config(cfg_file, 'record_time','collect_range')
+            set_config(cfg_file, 'record_time', 'update_time')
+
         else:
             #upload failed ,save data to csv
             print('\033[1;35mupload failed ,save to csv \033[0m')
@@ -439,7 +452,7 @@ def laser_post_thread():
                     file3 = {'fileName': open(laser_filename, 'rb')}
                     response = requests.post(laser_url, files=file3)
                     if response.status_code == 200:
-                        json = resp.json()
+                        json = response.json()
                         print(json)
                         collectTime = json['data']['collectTime']
                         collectRange = json['data']['collectRange']
